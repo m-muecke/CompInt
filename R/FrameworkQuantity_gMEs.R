@@ -26,7 +26,14 @@
 #' model <- lm(mpg ~ cyl + disp + hp + drat, data = mtcars)
 #' get_gME(model_fit = model, reg_of_interest = "cyl")
 #' }
-get_gME <- function(model_fit, reg_of_interest = NULL, integration = NULL, seed = NULL, ndraws = 1000, separate_interactions = FALSE, catRIbin = FALSE, ...) {
+get_gME <- function(model_fit,
+                    reg_of_interest = NULL,
+                    integration = NULL,
+                    seed = NULL,
+                    ndraws = 1000,
+                    separate_interactions = FALSE,
+                    catRIbin = FALSE,
+                    ...) {
   run_in_parent(getting_situated1)
   integration(model = model)
   run_in_parent(getting_situated2)
@@ -40,24 +47,43 @@ get_gME <- function(model_fit, reg_of_interest = NULL, integration = NULL, seed 
 
 
   if (model[["type"]] %in% c("GLM", "GLMM")) {
-    coef_draws <- draws_from_paramdist(model = model, ndraws = ndraws, seed = seed, ...)
+    coef_draws <- draws_from_paramdist(
+      model = model, ndraws = ndraws, seed = seed, ...
+    )
 
-    linear_predictor <- make_linear_predictor(mod = model, reg_of_interest = reg_of_interest, separate_interactions = separate_interactions)
+    linear_predictor <- make_linear_predictor(
+      mod = model,
+      reg_of_interest = reg_of_interest,
+      separate_interactions = separate_interactions
+    )
 
     run_in_parent(getting_inverse)
 
     eval_g_theta_at_point <- eval(parse(text = paste(
       "function(theta,l,", reg_of_interest, "=NULL){",
-      make_g_theta(model_type = model[["type"]], linear_predictor = linear_predictor, inverse_link = inverse_link, vectorized = FALSE, ...),
+      make_g_theta(
+        model_type = model[["type"]],
+        linear_predictor = linear_predictor,
+        inverse_link = inverse_link,
+        vectorized = FALSE,
+        ...
+      ),
       "}"
     )))
 
     if (distribution == "empirical") {
-      reticulate::source_python(system.file("python_scripts", "gME_simplegrad.py", package = "CompInt"))
+      reticulate::source_python(
+        system.file("python_scripts", "gME_simplegrad.py", package = "CompInt")
+      )
       run_in_parent(empirical_Int_catmet_handling)
       run_in_parent(data_asmpt)
 
-      interaction_data <- make_interaction_data(mod = model, data = EmpDat, reg_of_interest = reg_of_interest, separate_interactions = separate_interactions)
+      interaction_data <- make_interaction_data(
+        mod = model,
+        data = EmpDat,
+        reg_of_interest = reg_of_interest,
+        separate_interactions = separate_interactions
+      )
       EmpDat <- interaction_data$data
 
       if (all(c(any(interaction_data$involved %in% model[["model_specification"]][["regs"]][["metric"]]), any(interaction_data$involved %in% model[["model_specification"]][["regs"]][["categorical"]])))) {
@@ -70,7 +96,10 @@ get_gME <- function(model_fit, reg_of_interest = NULL, integration = NULL, seed 
 
 
       if (continue_metric) {
-        result <- prepare_return(matrix(nrow = length(interaction_data$involved), ncol = ndraws), interaction_data$involved)
+        result <- prepare_return(
+          matrix(nrow = length(interaction_data$involved), ncol = ndraws),
+          interaction_data$involved
+        )
         for (reg in interaction_data$involved) {
           # progressr::with_progress({
           # p <- progressr::progressor(along = lapply(nrow(coef_draws), function(x) coef_draws[x,]))
@@ -107,11 +136,17 @@ get_gME <- function(model_fit, reg_of_interest = NULL, integration = NULL, seed 
         if ("refcat" %in% ellipsisvars) {
           # TOFIX #Code for when the RI's reference category should be one that is not specified in the model
         }
-        RIvals_prep <- dealing_with_catRI(dat = EmpDat, g_theta = eval_g_theta_at_point, RIname = reg_of_interest)
+        RIvals_prep <- dealing_with_catRI(
+          dat = EmpDat,
+          g_theta = eval_g_theta_at_point,
+          RIname = reg_of_interest
+        )
 
         if (!separate_interactions) {
           run_in_parent(prepping_for_catRI, i = 1)
-          result <- prepare_return(matrix(nrow = length(nonref_cats), ncol = ndraws), nonref_cats)
+          result <- prepare_return(
+            matrix(nrow = length(nonref_cats), ncol = ndraws), nonref_cats
+          )
         } else {
           # TOFIX
           # continue here!
@@ -122,21 +157,36 @@ get_gME <- function(model_fit, reg_of_interest = NULL, integration = NULL, seed 
         if (assumption %in% c("A.I", "A.II'")) {
           for (i in seq_along(length(RIvals_prep))) {
             run_in_parent(prepping_for_catRI, i = i)
-            IE_refcat <- simple_emp_int(data = cbind(RIvals[[ref_cat]], EmpDat[, torem, drop = FALSE]), coef_draws = coef_draws, f = eval_g_theta_at_point)
+            IE_refcat <- simple_emp_int(
+              data = cbind(RIvals[[ref_cat]], EmpDat[, torem, drop = FALSE]),
+              coef_draws = coef_draws, f = eval_g_theta_at_point
+            )
 
             for (cat in nonref_cats) {
-              result[cat, ] <- simple_emp_int(data = cbind(RIvals[[cat]], EmpDat[, torem, drop = FALSE]), coef_draws = coef_draws, f = eval_g_theta_at_point) - IE_refcat
+              result[cat, ] <- simple_emp_int(
+                data = cbind(RIvals[[cat]], EmpDat[, torem, drop = FALSE]),
+                coef_draws = coef_draws,
+                f = eval_g_theta_at_point
+              ) - IE_refcat
             }
           }
         } else { # now for assumption "A.II''"
           for (i in seq_along(length(RIvals_prep))) {
             run_in_parent(prepping_for_catRI, i = i)
             all_cats <- c(ref_cat, nonref_cats)
-            IE_refcat <- simple_emp_int(data = cbind(RIvals[[ref_cat]], EmpDat[which(rowSums(EmpDat[nonref_cats]) == 0), torem, drop = FALSE]), coef_draws = coef_draws, f = eval_g_theta_at_point)
+            IE_refcat <- simple_emp_int(
+              data = cbind(RIvals[[ref_cat]], EmpDat[which(rowSums(EmpDat[nonref_cats]) == 0), torem, drop = FALSE]),
+              coef_draws = coef_draws,
+              f = eval_g_theta_at_point
+            )
 
             for (cat in nonref_cats) {
               other_cats <- all_cats[all_cats != cat]
-              result[cat, ] <- simple_emp_int(data = cbind(RIvals[[cat]], EmpDat[which(rowSums(EmpDat[other_cats]) == 0), torem, drop = FALSE]), coef_draws = coef_draws, f = eval_g_theta_at_point) - IE_refcat
+              result[cat, ] <- simple_emp_int(
+                data = cbind(RIvals[[cat]], EmpDat[which(rowSums(EmpDat[other_cats]) == 0), torem, drop = FALSE]),
+                coef_draws = coef_draws,
+                f = eval_g_theta_at_point
+              ) - IE_refcat
             }
           }
         }
@@ -147,15 +197,26 @@ get_gME <- function(model_fit, reg_of_interest = NULL, integration = NULL, seed 
       return(result)
     }
     if (distribution == "other_standard_opts") {
-      reticulate::source_python(system.file("python_scripts", "ProbInt_LinPred.py", package = "CompInt"))
+      reticulate::source_python(
+        system.file("python_scripts", "ProbInt_LinPred.py", package = "CompInt")
+      )
 
       run_in_parent(int_for_RIunif_empirical)
 
       progressr::with_progress({
-        p <- progressr::progressor(along = lapply(seq_len(nrow(coef_draws)), function(x) coef_draws[x, ]))
+        p <- progressr::progressor(
+          along = lapply(seq_len(nrow(coef_draws)), function(x) coef_draws[x, ])
+        )
         result <- apply(coef_draws, 1, function(x) {
           p(sprintf("x=%g", x))
-          integrate_LPmods(ints = ints, data = data, LinPred = gsub_complex("[l]", linear_predictor$non_vectorized), thetas = c(0, x), grad_variable = reg_of_interest, fun = inverse_link)
+          integrate_LPmods(
+            ints = ints,
+            data = data,
+            LinPred = gsub_complex("[l]", linear_predictor$non_vectorized),
+            thetas = c(0, x),
+            grad_variable = reg_of_interest,
+            fun = inverse_link
+          )
         })
       })
       return(result)
